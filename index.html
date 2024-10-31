@@ -1,0 +1,369 @@
+import React, { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { FileText, AlertTriangle, User, Cpu, FolderOpen, ShieldAlert, Info } from 'lucide-react';
+
+const TempFileSimulation = () => {
+  const [phase, setPhase] = useState(0);
+  
+  const phases = [
+    {
+      title: "Contexte - Application Web",
+      description: "Une application web de traitement d'images permet aux utilisateurs de télécharger et modifier des photos",
+      technicalContext: `Le traitement d'image nécessite :
+1. Stockage temporaire du fichier uploadé
+2. Traitement par un service externe
+3. Renvoi du résultat à l'utilisateur
+
+Les fichiers temporaires sont utilisés pour :
+• Stocker les uploads en cours
+• Sauvegarder les modifications
+• Gérer plusieurs utilisateurs simultanés`,
+      code: `// Route d'upload d'image
+app.post('/upload', (req, res) => {
+  // Création fichier temporaire
+  const tempPath = '/tmp/upload_' + 
+                  req.session.id + '_' +
+                  Date.now() + '.jpg';
+                  
+  // Sauvegarde de l'image
+  req.files.image.mv(tempPath);
+  
+  // Traitement image...
+  processImage(tempPath);
+});`,
+      systemState: {
+        tempDir: '/tmp',
+        files: [
+          'upload_user123_1699112345.jpg',
+          'upload_user456_1699112347.jpg'
+        ],
+        processes: [
+          { id: 1234, name: 'Serveur Web', type: 'legitimate' },
+          { id: 1235, name: 'ImageMagick', type: 'legitimate' }
+        ],
+        permissions: 'rw-r--r--',
+        predictable: true,
+        usageExample: "Traitement photo de profil"
+      }
+    },
+    {
+      title: "Identification du Problème",
+      description: "Les fichiers temporaires créés sont vulnérables à plusieurs types d'attaques",
+      technicalContext: `Problèmes de sécurité :
+
+1. Noms Prévisibles
+• Pattern fixe dans le nom
+• Utilisation de PID ou timestamps
+• Noms séquentiels
+
+2. Permissions incorrectes
+• Fichiers lisibles par tous
+• Répertoire accessible en écriture
+• Absence de nettoyage
+
+3. Race Conditions
+• Temps entre création et utilisation
+• Pas de vérification d'existence
+• Liens symboliques non vérifiés`,
+      code: `// Problèmes dans le code actuel
+- Nom prévisible (timestamp)
+- Pas de vérification des liens
+- Permissions trop larges
+- Pas de nettoyage garanti
+
+// Possibilités d'attaque
+1. Créer un lien avant l'appli
+2. Remplacer pendant traitement
+3. Lire fichiers d'autres users
+4. Injection via lien symbolique`,
+      systemState: {
+        tempDir: '/tmp',
+        files: [
+          'upload_user123_1699112345.jpg ⚠️',
+          'upload_user456_1699112347.jpg ⚠️',
+          '.htaccess → /etc/passwd 🔗'
+        ],
+        processes: [
+          { id: 1234, name: 'Serveur Web', type: 'legitimate' },
+          { id: 1235, name: 'ImageMagick', type: 'legitimate' },
+          { id: 1236, name: 'Attaquant', type: 'malicious' }
+        ],
+        permissions: 'rw-r--r--',
+        predictable: true,
+        usageExample: "Tentative d'accès aux fichiers"
+      }
+    },
+    {
+      title: "Scénario d'Attaque",
+      description: "Un attaquant exploite les faiblesses des fichiers temporaires pour compromettre le système",
+      technicalContext: `Étapes de l'attaque :
+
+1. Analyse
+• Observer le pattern des noms
+• Identifier les moments de création
+• Repérer les fichiers non nettoyés
+
+2. Préparation
+• Créer des liens symboliques
+• Préparer les fichiers malveillants
+• Scanner le répertoire temp
+
+3. Exploitation
+• Race condition lors de l'upload
+• Accès aux données d'autres users
+• Elevation de privilèges`,
+      code: `// Script d'attaque
+while true; do
+  # Crée liens vers fichiers sensibles
+  ln -sf /etc/passwd /tmp/upload_*
+  ln -sf /etc/shadow /tmp/upload_*
+  
+  # Surveille les nouveaux fichiers
+  inotifywait -e create /tmp
+  
+  # Tente de lire/modifier
+  for f in /tmp/upload_*; do
+    cat $f > stolen_data
+  done
+done`,
+      systemState: {
+        tempDir: '/tmp',
+        files: [
+          'upload_user123_1699112345.jpg → /etc/shadow ⚠️',
+          'upload_user456_1699112347.jpg → config.php ⚠️',
+          'stolen_data',
+          'malicious.php'
+        ],
+        processes: [
+          { id: 1234, name: 'Serveur Web', type: 'compromised' },
+          { id: 1235, name: 'ImageMagick', type: 'legitimate' },
+          { id: 1236, name: 'Attaquant', type: 'malicious' }
+        ],
+        permissions: 'rw-r--r--',
+        predictable: true,
+        usageExample: "Vol de données sensibles"
+      }
+    },
+    {
+      title: "Solution Sécurisée",
+      description: "Implémentation de bonnes pratiques pour la gestion des fichiers temporaires",
+      technicalContext: `Mesures de sécurité :
+
+1. Noms de Fichiers
+• Utilisation de UUID/random
+• Vérification de collision
+• Préfixe application unique
+
+2. Permissions
+• umask restrictif (077)
+• Répertoire dédié
+• Nettoyage systématique
+
+3. Vérifications
+• Test des liens symboliques
+• Validation du propriétaire
+• Check des permissions
+
+4. Processus
+• Création sécurisée
+• Surveillance active
+• Rotation régulière`,
+      code: `// Création sécurisée
+function createSecureTempFile(prefix) {
+  // Répertoire dédié avec permissions
+  const tempDir = '/var/app/temp';
+  fs.mkdirSync(tempDir, {mode: 0o700});
+
+  // Nom aléatoire unique
+  const uuid = crypto.randomBytes(32)
+                    .toString('hex');
+  const tempFile = path.join(
+    tempDir,
+    \`\${prefix}_\${uuid}\`
+  );
+
+  // Vérifications de sécurité
+  const fd = fs.openSync(tempFile, 
+    'wx', // Échec si existe
+    0o600  // User only
+  );
+
+  // Vérifie les liens symboliques
+  const stats = fs.lstatSync(tempFile);
+  if (stats.isSymbolicLink()) {
+    throw new Error('Lien détecté');
+  }
+
+  return {path: tempFile, fd};
+}
+
+// Utilisation
+try {
+  const {path, fd} = createSecureTempFile(
+    'upload'
+  );
+  // Utiliser le fichier...
+} finally {
+  // Nettoyage garanti
+  cleanup(path);
+}`,
+      systemState: {
+        tempDir: '/var/app/temp',
+        files: [
+          'upload_8a7b6c5d...e4f3.tmp',
+          'upload_2c3d4e5f...a9b8.tmp'
+        ],
+        processes: [
+          { id: 1234, name: 'Serveur Web (isolé)', type: 'legitimate' },
+          { id: 1235, name: 'ImageMagick (isolé)', type: 'legitimate' }
+        ],
+        permissions: 'rw-------',
+        predictable: false,
+        usageExample: "Traitement sécurisé"
+      }
+    }
+  ];
+
+  const FileSystemVisualizer = ({ data }) => {
+    const { tempDir, files, processes, permissions, predictable, usageExample } = data;
+    
+    return (
+      <div className="flex flex-col space-y-6 p-4">
+        <div className="bg-gray-800 p-4 rounded-lg">
+          <div className="flex items-center space-x-2 mb-2">
+            <Info className="text-blue-400" />
+            <span className="text-white">Cas d'utilisation :</span>
+          </div>
+          <span className="text-gray-300">{usageExample}</span>
+        </div>
+
+        <div className="bg-gray-900 p-4 rounded-lg">
+          <div className="flex items-center space-x-2 mb-4">
+            <FolderOpen className="text-yellow-500" />
+            <span className="text-white font-mono">{tempDir}</span>
+          </div>
+          
+          <div className="space-y-2">
+            {files.map((file, index) => (
+              <div 
+                key={index} 
+                className={`flex items-center space-x-2 p-2 rounded ${
+                  file.includes('⚠️') ? 'bg-red-900/30' :
+                  file.includes('🔗') ? 'bg-yellow-900/30' : 
+                  'bg-gray-800'
+                }`}
+              >
+                <FileText className={
+                  file.includes('→') ? 'text-yellow-500' : 
+                  file.includes('⚠️') ? 'text-red-500' :
+                  'text-blue-500'
+                } />
+                <span className="text-white font-mono text-sm">{file}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-gray-900 p-4 rounded-lg">
+          <h3 className="text-white mb-2">Processus Actifs</h3>
+          <div className="space-y-2">
+            {processes.map((process, index) => (
+              <div 
+                key={index}
+                className={`flex items-center justify-between p-2 rounded ${
+                  process.type === 'malicious' ? 'bg-red-900/30' :
+                  process.type === 'compromised' ? 'bg-yellow-900/30' :
+                  'bg-gray-800'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <User className={
+                    process.type === 'malicious' ? 'text-red-500' :
+                    process.type === 'compromised' ? 'text-yellow-500' :
+                    'text-green-500'
+                  } />
+                  <span className="text-white font-mono text-sm">
+                    {process.name} (PID: {process.id})
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-gray-900 p-4 rounded-lg">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center space-x-2">
+              <ShieldAlert className={predictable ? 'text-red-500' : 'text-green-500'} />
+              <span className="text-white">Sécurité:</span>
+            </div>
+            <div className="font-mono text-sm">
+              <span className="text-gray-400">Permissions: </span>
+              <span className={`${
+                permissions.includes('rw-r--r--') ? 'text-yellow-400' :
+                permissions.includes('rw-------') ? 'text-green-400' :
+                'text-red-400'
+              }`}>{permissions}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="w-full max-w-4xl">
+      <Card className="bg-slate-900">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-white flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              {phases[phase].title}
+            </CardTitle>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setPhase(Math.max(0, phase - 1))}
+                disabled={phase === 0}
+              >
+                Précédent
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setPhase(Math.min(phases.length - 1, phase + 1))}
+                disabled={phase === phases.length - 1}
+              >
+                Suivant
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-4">
+              <Card className="bg-black p-4">
+                <p className="text-white mb-4">{phases[phase].description}</p>
+                <div className="mb-4 p-2 bg-gray-900 rounded">
+                  <pre className="text-blue-400 font-mono text-sm whitespace-pre-wrap">
+                    {phases[phase].technicalContext}
+                  </pre>
+                </div>
+                <pre className="text-green-400 font-mono text-sm p-2 bg-gray-900 rounded whitespace-pre-wrap">
+                  {phases[phase].code}
+                </pre>
+              </Card>
+            </div>
+            <Card className="bg-black">
+              <FileSystemVisualizer data={phases[phase].systemState} />
+            </Card>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+export default TempFileSimulation;
